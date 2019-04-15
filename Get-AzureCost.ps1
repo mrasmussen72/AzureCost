@@ -6,8 +6,8 @@
 
 
 ####GlobalVariables#######################################################
-[hashtable]$global:Allresources = @{}
-[bool]$global:FirstRun = $true
+[hashtable]$global:Allresources = @{}   # used so we only call get resources in Azure once, save list globally for use later
+[bool]$global:FirstRun = $true          # Leave default, if the global list hasn't been populated, populate it once
 
 #region Functions - Add your own functions here.  Leave Login-Azure as-is
 ####Functions#############################################################
