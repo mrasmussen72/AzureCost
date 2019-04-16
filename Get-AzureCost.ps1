@@ -9,7 +9,7 @@
 [hashtable]$global:Allresources = @{}   # used so we only call get resources in Azure once, save list globally for use later
 [bool]$global:FirstRun = $true          # Leave default, if the global list hasn't been populated, populate it once
 
-#region Functions - Add your own functions here.  Leave Login-Azure as-is
+#region Functions - Add your own functions here.  Leave AzureLogin as-is
 ####Functions#############################################################
 function AzureLogin
 {
@@ -27,56 +27,75 @@ function AzureLogin
         $LoginName
     )
 
-    $success = $false
-    if($RunPasswordPrompt)
-    {
-        #don't need to test for the password file, the file will be created if prompted
-        Read-host "Enter your password (Username:$($LoginName))" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
-    }
-    else 
-    {
-        if(!(Test-Path -Path $SecurePasswordLocation))
-        {
-            $enterPassword = Read-Host -Prompt "There isn't a password file in the location you specified ($SecurePasswordLocation).  Do you want to enter a password now? (Enter Yes to enter a password)"
-            if($enterPassword.ToLower().Equals("yes"))
-            {
-                Read-host "Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
-            }
-            else 
-            {
-                #answered something other than yes to prompt, no password file, exit
-                $success = $false
-    
-            }
-        } 
-    }
-    $password = Get-Content $SecurePasswordLocation | ConvertTo-SecureString
-    $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $LoginName, $password
-    
     try 
     {
-        #$subscription = Connect-AzureRmAccount -Credential $cred 
-        $subscription = Connect-AzAccount -Credential $cred
-        if(!($subscription))
+        $success = $false
+        if($RunPasswordPrompt)
         {
-            # error logging into account, exit
-            #Write-Host "Could not log into account, exiting"
-            $success = $false
-            throw "Failed to login, exiting..."
-            #exit
+            #don't need to test for the password file, the file will be created if prompted
+            Read-host "Enter your password (Username:$($LoginName))" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
         }
         else 
         {
-            $success = $true      
+            if(!(Test-Path -Path $SecurePasswordLocation))
+            {
+                write-host "There isn't a password file in the location you specified $($SecurePasswordLocation)."
+                #$enterPassword = Read-Host -Prompt "There isn't a password file in the location you specified ($SecurePasswordLocation).  `r`n Do you want to enter a password now? (Type `"Yes`" and press enter, then you will be prompted to enter your password)"
+                #if($enterPassword.ToLower().Equals("yes"))
+                #{
+                    Read-host "Password file not found, Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
+                #}
+                #else 
+                #{
+                    #answered something other than yes to prompt, no password file, exit
+                 #   $success = $false
+                 #   throw "Password file incorrectly specified, exiting..."
+        
+                #}
+            } 
         }
+    
+        try 
+        {
+            $password = Get-Content $SecurePasswordLocation | ConvertTo-SecureString
+            $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $LoginName, $password  
+        }
+        catch 
+        {
+            $success = $false
+        }
+        
+        try 
+        {
+            $subscription = Connect-AzAccount -Credential $cred
+      
+            if(!($subscription))
+            {
+                # error logging into account, exit
+                #Write-Host "Could not log into account, exiting"
+                $success = $false
+                throw "Failed to login, exiting..."
+                #exit
+            }
+            else 
+            {
+                $success = $true      
+            }
+        }
+        catch 
+        {
+            #Write-Host "Could not log into account, exiting"
+            $_.Exception.Message
+            $success = $false
+            #throw "Failed to login, exiting..."
+            #exit   
+        } 
     }
     catch 
     {
-        #Write-Host "Could not log into account, exiting"
-        $success = $false
-        #throw "Failed to login, exiting..."
-        #exit   
+        $success = $false    
     }
+    
     return $success
 }
 
@@ -89,33 +108,42 @@ Function GetAzureIDValue
     )
     $returnValue = ""
     $IDPayloadJSON = ""
-    if(($Name -and $IDPayload) -or ($IDPayload.ToLower() -eq "null"))
+    try 
     {
-        if($IDPayload -match '[{}]' )
+        if(($Name -and $IDPayload) -or ($IDPayload.ToLower() -eq "null"))
         {
-            $IDPayloadJSON = ConvertFrom-Json -InputObject $IDPayload
-            $fullText = $IDPayloadJSON[0]
-            $returnValue = Get-AzureIDValue -IDPayload $fullText.ID -Name $Name
-            return $returnValue
-        }
-        $nameValCollection = $IDPayload.Split('/')
-        # could add a $test + 1 to get the next value of the array, which would be what we want.  No need to loop
-        #$test = $nameValCollection.IndexOf($Name)
-        for($x=0;$x -le $nameValCollection.Count;$x++)
-        {
-            try
+            if($IDPayload -match '[{}]' )
             {
-                if($nameValCollection[$x].Equals($Name))
+                $IDPayloadJSON = ConvertFrom-Json -InputObject $IDPayload
+                $fullText = $IDPayloadJSON[0]
+                $returnValue = GetAzureIDValue -IDPayload $fullText.ID -Name $Name
+                return $returnValue
+            }
+            $nameValCollection = $IDPayload.Split('/')
+            # could add a $test + 1 to get the next value of the array, which would be what we want.  No need to loop
+            #$test = $nameValCollection.IndexOf($Name)
+            $i = 0
+            for($x=0;$x -le $nameValCollection.Count;$x++)
+            {
+                try
                 {
-                    $returnValue = $nameValCollection[$x+1]
-                    break
+                    if($nameValCollection[$x].ToLower().Equals($Name.ToLower()))
+                    {
+                        $returnValue = $nameValCollection[$x+1]
+                        break
+                    }
+                }
+                catch 
+                {
+                    #something went wrong
+                    $temp = $_.Exception.Message
                 }
             }
-            catch 
-            {
-                #something went wrong
-            }
         }
+    }
+    catch 
+    {
+        $temp = $_.Exception.Message
     }
     return $returnValue
 }
@@ -157,18 +185,30 @@ function GetCostByDays
     #first run get all resources in question, susequent run loop through the full list and get values
     if($global:FirstRun)
     {
-        #populate global list
+        #populate global list - might be too many in some environments, have to test
         $global:FirstRun = $false
         $resources = Get-AllResources -StartDate $startDate -EndDate $endDate
-            
+
         foreach($resource in $resources)
         {
-            if($resource)
+            try 
             {
-                $global:Allresources.Add($resource.Id,$resource)
-                #potentially do the work below in this loop
+                if($resource)
+                {
+                    if(!($global:Allresources.Contains($resource.Id)))
+                    {
+                        $global:Allresources.Add($resource.Id,$resource)
+                        #potentially do the work below in this loop
+                    }
+
+                }
             }
-        }
+            catch 
+            {
+                $temp = $_.Exception.Message
+                continue
+            }
+        }   
     }
 
     if($UseAllResourceGroups)
@@ -208,7 +248,7 @@ function GetCostByDays
 [string]    $SecurePasswordLocation =      ""      #Path and filename for the secure password file c:\Whatever\securePassword.txt
 [bool]      $RunPasswordPrompt =           $true   #Uses Read-Host to prompt the user at the command prompt to enter password.  this will create the text file in $SecurePasswordLocation.
 [bool]      $GetCostAllResources =         $true   #Gets the cost of ALL objects in ALL resource groups
-[int]       $numOfDays =                   23      # How far to calculate cost.  Value here is number of days in the past
+[int]       $numOfDays =                   1      # How far to calculate cost.  Value here is number of days in the past
 [decimal]   $total =                       0.0     # Used to calculate total cost, should leave default
 try 
 {
@@ -217,8 +257,9 @@ try
     {
         #Login Successful
         #Add your Azure cmdlets here ###########################################
-        
+        "Starting calculations..."
         $resourceGroups = Get-AzResourceGroup
+        "Cost calcualted from today to $($numOfDays) day(s) ago `r`n"
         foreach($resourceGroup in $resourceGroups)
         {
             $total = $total + (GetCostByDays $numOfDays -UseAllResourceGroups $false -ResourceGroupName $resourceGroup.ResourceGroupName)
@@ -229,8 +270,10 @@ try
         if($GetCostAllResources)
         {
             $AllGroupsCost = GetCostByDays -NumberOfDaysBack 23 -UseAllResourceGroups $true
-            "Cost of all resource groups: " + "{0:C}" -f $AllGroupsCost
+            "Cost of all resource groups: " + "{0:C}" -f $AllGroupsCost + "`r`n"
         }
+
+        #End Azure cmdlets #######################################################
     }
     else 
     {
