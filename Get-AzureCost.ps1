@@ -38,7 +38,7 @@ function AzureLogin
         if($RunPasswordPrompt)
         {
             #if fails return false
-            Read-Host -Prompt "Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
+            Read-Host -Prompt "Enter your password for $($LoginName)" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
         }
         else 
         {
