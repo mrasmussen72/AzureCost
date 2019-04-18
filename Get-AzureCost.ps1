@@ -249,7 +249,7 @@ function GetCostByDays
 
 #endregion
 
-####Begin Code - enter your code in the if statement below
+####Begin Code - enter your code in the if statement below####
 #Variables - Add your values for the variables here, you can't leave the values blank
 [string]    $LoginName =                   ""      #Azure username, something@something.onmicrosoft.com 
 [string]    $SecurePasswordLocation =      ""      #Path and filename for the secure password file c:\Whatever\securePassword.txt
