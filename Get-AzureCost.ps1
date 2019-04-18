@@ -266,7 +266,6 @@ try
     {
         #Login Successful
         #Add your Azure cmdlets here ###########################################
-        Get-AzVM
         "Starting calculations..."
         $resourceGroups = Get-AzResourceGroup
         "Cost calcualted from today $($numOfDays) day(s) ago to today  `r`n"
