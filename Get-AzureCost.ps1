@@ -17,85 +17,81 @@ function AzureLogin
     Param
     (
         [Parameter(Mandatory=$false)]
-        [bool]
-        $RunPasswordPrompt = $false,
+        [bool] $RunPasswordPrompt = $false,
         [Parameter(Mandatory=$false)]
-        [string]
-        $SecurePasswordLocation,
+        [string] $SecurePasswordLocation,
         [Parameter(Mandatory=$false)]
-        [string]
-        $LoginName
+        [string] $LoginName,
+        [Parameter(Mandatory=$false)]
+        [bool] $AzureForGov = $false
     )
 
     try 
     {
         $success = $false
+        
+        if(!($SecurePasswordLocation -match '(\w)[.](\w)') )
+        {
+            write-host "Encrypted password file ends in a directory, this needs to end in a filename.  Exiting..."
+            return false # could make success false
+        }
         if($RunPasswordPrompt)
         {
-            #don't need to test for the password file, the file will be created if prompted
-            Read-host "Enter your password (Username:$($LoginName))" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
+            #if fails return false
+            Read-Host -Prompt "Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
         }
         else 
         {
-            if(!(Test-Path -Path $SecurePasswordLocation))
+            #no prompt, does the password file exist
+            if(!(Test-Path $SecurePasswordLocation))
             {
                 write-host "There isn't a password file in the location you specified $($SecurePasswordLocation)."
-                #$enterPassword = Read-Host -Prompt "There isn't a password file in the location you specified ($SecurePasswordLocation).  `r`n Do you want to enter a password now? (Type `"Yes`" and press enter, then you will be prompted to enter your password)"
-                #if($enterPassword.ToLower().Equals("yes"))
-                #{
-                    Read-host "Password file not found, Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
-                #}
-                #else 
-                #{
-                    #answered something other than yes to prompt, no password file, exit
-                 #   $success = $false
-                 #   throw "Password file incorrectly specified, exiting..."
-        
-                #}
+                Read-host "Password file not found, Enter your password" -assecurestring | convertfrom-securestring | out-file $SecurePasswordLocation
+                #return false if fail 
+                if(!(Test-Path -Path $SecurePasswordLocation)){return Write-Host "Path doesn't exist: $($SecurePasswordLocation)"; $false}
             } 
         }
-    
+
         try 
         {
             $password = Get-Content $SecurePasswordLocation | ConvertTo-SecureString
-            $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $LoginName, $password  
+            $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $LoginName, $password 
+            $success = $true
         }
         catch 
         {
             $success = $false
         }
-        
+
+
         try 
         {
-            $subscription = Connect-AzAccount -Credential $cred
-      
-            if(!($subscription))
+            if($success)
             {
-                # error logging into account, exit
-                #Write-Host "Could not log into account, exiting"
-                $success = $false
-                throw "Failed to login, exiting..."
-                #exit
-            }
-            else 
-            {
-                $success = $true      
+                if($AzureForGov){Connect-AzAccount -Credential $cred -EnvironmentName AzureUSGovernment | Out-Null}
+                else{Connect-AzAccount -Credential $cred | Out-Null}
+                $DoesUserHaveAccess = Get-AzSubscription 
+                if(!($DoesUserHaveAccess))
+                {
+                    # error logging into account or user doesn't have subscription rights, exit
+                    $success = $false
+                    throw "Failed to login, exiting..."
+                    #exit
+                }
+                else{$success = $true}  
             }
         }
         catch 
         {
-            #Write-Host "Could not log into account, exiting"
-            $_.Exception.Message
-            $success = $false
-            #throw "Failed to login, exiting..."
-            #exit   
+            #$_.Exception.Message
+            $success = $false 
         } 
     }
     catch 
     {
+        $_.Exception.Message | Out-Null
         $success = $false    
     }
-    
     return $success
 }
 
@@ -157,13 +153,24 @@ function Get-AllResources
     )
 
     $retVal
-    if($resourceGroupsName)
+    try
     {
-        $retVal = (Get-AzConsumptionUsageDetail -StartDate $startDate -EndDate $endDate -ResourceGroup $resourceGroupsName)
+
+        if($resourceGroupsName)
+        {
+            $retVal = (Get-AzConsumptionUsageDetail -StartDate $startDate -EndDate $endDate -ResourceGroup $resourceGroupsName -IncludeMeterDetails $true - )
+            #Get-AzConsumptionUsageDetail -
+        }
+        else 
+        {
+            #$retVal = (Get-AzConsumptionUsageDetail -StartDate $startDate -EndDate $endDate)
+            $retVal = Get-AzConsumptionUsageDetail -Expand "MeterDetails" -StartDate $startDate -EndDate $endDate
+        }
     }
-    else 
+    catch
     {
-        $retVal = (Get-AzConsumptionUsageDetail -StartDate $startDate -EndDate $endDate)
+        $temp = $_.Exception.Message
+
     }
     return $retVal
 }
@@ -247,19 +254,22 @@ function GetCostByDays
 [string]    $LoginName =                   ""      #Azure username, something@something.onmicrosoft.com 
 [string]    $SecurePasswordLocation =      ""      #Path and filename for the secure password file c:\Whatever\securePassword.txt
 [bool]      $RunPasswordPrompt =           $true   #Uses Read-Host to prompt the user at the command prompt to enter password.  this will create the text file in $SecurePasswordLocation.
+[bool]      $AzureForGov =                 $false   #If working with Azure for Government this should be $true
 [bool]      $GetCostAllResources =         $true   #Gets the cost of ALL objects in ALL resource groups
-[int]       $numOfDays =                   1      # How far to calculate cost.  Value here is number of days in the past
+[int]       $numOfDays =                   10      # How far to calculate cost.  Value here is number of days in the past
 [decimal]   $total =                       0.0     # Used to calculate total cost, should leave default
 try 
 {
     
-    if(AzureLogin -RunPasswordPrompt $RunPasswordPrompt -SecurePasswordLocation $SecurePasswordLocation -LoginName $LoginName)
+    $success = AzureLogin -RunPasswordPrompt $RunPasswordPrompt -SecurePasswordLocation $SecurePasswordLocation -LoginName $LoginName -AzureForGov $AzureForGov
+    if($success)
     {
         #Login Successful
         #Add your Azure cmdlets here ###########################################
+        Get-AzVM
         "Starting calculations..."
         $resourceGroups = Get-AzResourceGroup
-        "Cost calcualted from today to $($numOfDays) day(s) ago `r`n"
+        "Cost calcualted from today $($numOfDays) day(s) ago to today  `r`n"
         foreach($resourceGroup in $resourceGroups)
         {
             $total = $total + (GetCostByDays $numOfDays -UseAllResourceGroups $false -ResourceGroupName $resourceGroup.ResourceGroupName)
