@@ -271,7 +271,7 @@ try
         "Cost calcualted from $($numOfDays) day(s) ago to today  `r`n"
         foreach($resourceGroup in $resourceGroups)
         {
-            $total = $total + (GetCostByDays $numOfDays -UseAllResourceGroups $GetCostAllResources -ResourceGroupName $resourceGroup.ResourceGroupName)
+            $total = $total + (GetCostByDays $numOfDays -UseAllResourceGroups $false -ResourceGroupName $resourceGroup.ResourceGroupName)
             $resourceGroup.ResourceGroupName + " = `t" + "{0:C}" -f $total
             $total = 0.0
         }
