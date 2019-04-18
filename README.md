@@ -9,6 +9,8 @@ $SecurePasswordLocation =      ""      #Path and filename for the secure passwor
 
 $RunPasswordPrompt =           $true   #Uses Read-Host to prompt the user at the command prompt to enter password.  this will create the  text file in $SecurePasswordLocation.
 
+$AzureForGov =                 $false   #Set to true if running commands against Azure for US Government
+
 $GetCostAllResources =         $true   #Gets the cost of ALL objects in ALL resource groups
 
 $numOfDays =                   1      # How far to calculate cost.  Value here is number of days in the past
