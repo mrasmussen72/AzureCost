@@ -268,7 +268,7 @@ try
         #Add your Azure cmdlets here ###########################################
         "Starting calculations..."
         $resourceGroups = Get-AzResourceGroup
-        "Cost calcualted from today $($numOfDays) day(s) ago to today  `r`n"
+        "Cost calcualted from $($numOfDays) day(s) ago to today  `r`n"
         foreach($resourceGroup in $resourceGroups)
         {
             $total = $total + (GetCostByDays $numOfDays -UseAllResourceGroups $false -ResourceGroupName $resourceGroup.ResourceGroupName)
