@@ -58,40 +58,29 @@ function AzureLogin
             $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $LoginName, $password 
             $success = $true
         }
-        catch 
-        {
-            $success = $false
-        }
-
-
+        catch {$success = $false}
         try 
         {
             if($success)
             {
                 if($AzureForGov){Connect-AzAccount -Credential $cred -EnvironmentName AzureUSGovernment | Out-Null}
                 else{Connect-AzAccount -Credential $cred | Out-Null}
-                $DoesUserHaveAccess = Get-AzSubscription 
-                if(!($DoesUserHaveAccess))
+                $context = Get-AzContext
+                if($context.Subscription.Name){$success = $true}
+                else{$success = $false}
+                
+                if(!($success))
                 {
-                    # error logging into account or user doesn't have subscription rights, exit
-                    $success = $false
-                    throw "Failed to login, exiting..."
-                    #exit
+                  # error logging into account or user doesn't have subscription rights, exit
+                  $success = $false
+                  throw "Failed to login, exiting..."
+                  #exit
                 }
-                else{$success = $true}  
             }
         }
-        catch 
-        {
-            #$_.Exception.Message
-            $success = $false 
-        } 
+        catch{$success = $false} 
     }
-    catch 
-    {
-        $_.Exception.Message | Out-Null
-        $success = $false    
-    }
+    catch {$success = $false}
     return $success
 }
 
